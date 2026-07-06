@@ -60,3 +60,6 @@ img_encoder/HIPT_4K/image_demo/
 
 # ==================== Binary NumPy Files ====================
 *.npy
+
+# ==================== Legacy / Temp ====================
+scgpt process/

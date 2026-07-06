@@ -71,8 +71,50 @@ adata.var                  # gene names
 | `convert_to_h5ad.py csv` | CSV-format (BRCA/DLPFC) | `.h5ad` |
 | `convert_to_h5ad.py visium` | 10X spaceranger output | `.h5ad` |
 | `convert_to_h5ad.py validate` | Any `.h5ad` | Format validation report |
+| `scgpt_finetune.py` | Reference scRNA-seq h5ad | Fine-tuned scGPT model |
+| `scgpt_embed.py` | Spatial h5ad + scGPT model | `.h5ad` with `obsm['X_scGPT']` |
 
-> **Note:** For full Xenium preprocessing with H&E nuclei segmentation (requires HoverNet), see the original scripts at the [Zenodo release](https://doi.org/10.5281/zenodo.15668517). The quick converter above bypasses HoverNet for fast training-ready h5ad generation.
+> **Note:** For full Xenium preprocessing with H&E nuclei segmentation (requires HoverNet), see the original scripts at the [Zenodo release](https://doi.org/10.5281/zenodo.15668517).
+
+## scGPT Integration
+
+CarHE can use **scGPT** embeddings for gene expression representation. Two-step workflow:
+
+### Step 1: Fine-tune scGPT
+
+```bash
+python scgpt_finetune.py \
+    --adata reference_scrnaseq.h5ad \
+    --checkpoint ./scgpt_checkpoints/scgpt/pan_cancer \
+    --epochs 10
+```
+
+### Step 2: Generate embeddings
+
+```bash
+python scgpt_embed.py \
+    --adata ../data/xenium_prostate.h5ad \
+    --checkpoint ./scgpt_checkpoints/scgpt/pan_cancer \
+    --finetuned ./scgpt_finetuned/best_model.pt
+```
+
+### scGPT Checkpoint Downloads
+
+| Checkpoint | Size | Link |
+|------------|------|------|
+| `pan_cancer` (pre-trained) | ~400 MB | [scGPT GitHub](https://github.com/bowang-lab/scGPT) |
+| `whole_blood` (pre-trained) | ~400 MB | [scGPT GitHub](https://github.com/bowang-lab/scGPT) |
+
+Download and extract to `scgpt_checkpoints/scgpt/`. Expected structure:
+
+```
+scgpt_checkpoints/scgpt/pan_cancer/
+├── best_model.pt
+├── args.json
+└── vocab.json
+```
+
+> **Reference:** Cui, H., et al. "scGPT: toward building a foundation model for single-cell multi-omics using generative AI." Nature Methods 2024. [[Paper]](https://www.nature.com/articles/s41592-024-02201-0) [[Code]](https://github.com/bowang-lab/scGPT)
 
 ## Example: Full Xenium Pipeline
 
