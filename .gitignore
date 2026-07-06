@@ -1,0 +1,62 @@
+# ==================== Python Cache ====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ==================== Jupyter ====================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ==================== Model Checkpoints & Large Weights ====================
+model/checkpoint/
+*.pth
+*.pt
+!img_encoder/HIPT_4K/checkpoints/
+img_encoder/HIPT_4K/Checkpoints/
+
+# ==================== Data Files (Large, Not for Git) ====================
+*.h5ad
+*.h5
+*.ome.tif
+*.tif
+*.csv.gz
+*.parquet
+*.zip
+*.tar.gz
+*.zarr.zip
+data/Xenium_Prime_Human_Prostate_FFPE_outs/
+data/data_processing/
+data/*.ome.tif
+data/*alignment*
+data/*.json
+data/analysis_summary.html
+data/experiment.xenium
+data/metrics_summary.csv
+
+# ==================== Logs & Outputs ====================
+model/logs/
+model/evaluation_results/
+model/inference_output/
+model/gradcam_output/
+*.log
+
+# ==================== IDE & System ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==================== Documents (Not Code) ====================
+*.pptx
+*.docx
+
+# ==================== Temp / Demo Files ====================
+img_encoder/HIPT_4K/attention_demo/
+img_encoder/HIPT_4K/image_demo/
+
+# ==================== Binary NumPy Files ====================
+*.npy
