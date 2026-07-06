@@ -6,10 +6,6 @@
 
 **CarHE** is a deep learning framework that aligns H&E-stained histology images with spatial transcriptomics gene expression via contrastive learning. It leverages a **Hierarchical Image Pyramid Transformer (HIPT)** as the image encoder and a **CLIP-style** contrastive objective to learn joint embeddings of tissue morphology and molecular profiles.
 
-<div align="center">
-  <img src="https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=Scientific+diagram+illustrating+a+deep+learning+framework+that+aligns+H%26E+histology+images+with+gene+expression+data+using+contrastive+learning.+Left+side+shows+a+tissue+slide+and+256x256+image+patches+entering+a+Vision+Transformer+encoder.+Right+side+shows+gene+expression+vectors+entering+a+projection+head.+Both+outputs+are+L2+normalized+and+fed+into+a+contrastive+loss+that+maximizes+cosine+similarity+for+matched+pairs.+Clean+minimal+vector+style+on+white+background.&image_size=landscape_16_9" width="100%" alt="CarHE Architecture">
-</div>
-
 ---
 
 ## Features
@@ -311,11 +307,11 @@ projection_dim = 384
 If you use CarHE in your research, please cite:
 
 ```bibtex
-@article{zou2024carhe,
+@article{zou2025carhe,
   title   = {CarHE: Cross-modal Alignment of Histology and Expression},
   author  = {Jiawei Zou and Kai Xiao and Zhiyuan Yuan and Luonan Chen},
   journal = {bioRxiv},
-  year    = {2024}
+  year    = {2025}
 }
 ```
 
