@@ -1,23 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-CarHE: Deep Learning Model for Predicting Spatial Transcriptomics from H&E Images
+CarHE: Cross-modal Alignment of Histology and Expression
 
-A CLIP-style contrastive learning framework that uses a HIPT ViT encoder
-to predict spatial transcriptomic gene expression from H&E-stained tissue images.
+A CLIP-style contrastive learning framework that maps H&E-stained tissue images
+to spatial transcriptomic gene expression using a HIPT ViT encoder.
 
 Main Modules:
     - config: Global configuration
     - model: HIPT_CLIP_Model definition
     - get_HE_model: HIPT ViT encoder loader
-    - Dataset: Training datasets (augmentDataset1)
-    - get_Data: Data loaders (BRCA, DLPFC, CCRCC)
-    - get_adata: h5ad data loader
+    - get_adata: AnnData data loader (unified entry point)
     - train: Training script
-    - inference: Inference & evaluation script
+    - inference: Inference and evaluation script
     - gradcam: GradCAM interpretability
-    - evaluate: Comprehensive evaluation
+    - evaluate: Comprehensive evaluation metrics
     - utils: Utility functions
 """
 
 __version__ = "1.0.0"
-__author__ = "CarHE Team"

@@ -238,28 +238,3 @@ def build_loaders_adata(
 
     print(f"Total spots/cells: {len(full)}, train: {n_train}, test: {n_test}")
     return train_loader, test_loader
-
-
-# ==================== Legacy Compat Interface (for train/inference calls) ====================
-def build_loaders_csv(
-    image_dir: str,
-    csv_pattern: str,
-    sample_ids: list,
-    batch_size: int = None,
-    num_workers: int = 4,
-) -> Tuple[DataLoader, DataLoader]:
-    """Build DataLoaders directly from CSV datasets (backward compatible; internally converts to h5ad first)
-    
-    This is the replacement for get_Data.py: accepts CSV paths -> auto-convert to h5ad -> calls build_loaders_adata
-    """
-    import tempfile
-    from convert_csv_to_h5ad import csv_folder_to_h5ad
-
-    tmp_path = os.path.join(tempfile.gettempdir(), f"_carhe_auto_{hash(tuple(sample_ids))}.h5ad")
-    if not os.path.exists(tmp_path):
-        adata = csv_folder_to_h5ad(image_dir, csv_pattern, sample_ids, output_path=tmp_path)
-    else:
-        import scanpy as sc
-        adata = sc.read_h5ad(tmp_path)
-
-    return build_loaders_adata(adata=adata, batch_size=batch_size, num_workers=num_workers)
