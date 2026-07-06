@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """CarHE Training Script
-统一使用 AnnData (h5ad) 格式。所有数据集必须先转换为 h5ad。
+All datasets must be converted to AnnData (.h5ad) format before use.
 
 Usage:
     python train.py --adata ../data/xenium_prostate.h5ad --epochs 100
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CarHE: H&E to Spatial Transcriptomics Training")
 
     parser.add_argument("--adata", type=str, default=CFG.default_adata_path,
-                        help="AnnData h5ad 文件路径")
+                        help="Path to AnnData .h5ad file")
     parser.add_argument("--batch_size", type=int, default=CFG.batch_size)
     parser.add_argument("--lr", type=float, default=CFG.learning_rate)
     parser.add_argument("--weight_decay", type=float, default=CFG.weight_decay)

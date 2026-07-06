@@ -1,30 +1,30 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-数据格式转换工具：任意格式 → AnnData (h5ad)
-============================================
+Data Format Conversion Tool: Any Format → AnnData (h5ad)
+========================================================
 
-将所有数据集转换为统一的 AnnData 格式，消除 CarHE 中的特例分支。
+Convert all datasets to a unified AnnData format, eliminating special-case branches in CarHE.
 
-支持的输入格式:
-    1. Xenium 预处理后数据 (matched_nuclei + cell_gene_matrix + HE image)
-    2. CSV 格式 (BRCA/DLPFC/CCRCC 的 spot_*.csv + intdata/*.csv)
-    3. 10X Visium spaceranger 输出
-    4. 已有 h5ad 文件（验证格式）
+Supported input formats:
+    1. Xenium preprocessed data (matched_nuclei + cell_gene_matrix + HE image)
+    2. CSV format (spot_*.csv + intdata/*.csv for BRCA/DLPFC/CCRCC)
+    3. 10X Visium spaceranger output
+    4. Existing h5ad files (format validation)
 
-输出: 标准 AnnData (h5ad) 文件
+Output: Standard AnnData (h5ad) file
 
 Usage:
     # Xenium → h5ad
     python convert_to_h5ad.py --input xenium
 
-    # CSV 数据集 → h5ad
+    # CSV dataset → h5ad
     python convert_to_h5ad.py --input csv --csv_dir ../data/BRCA
 
-    # 验证已有 h5ad
+    # Validate existing h5ad
     python convert_to_h5ad.py --input validate --adata path.h5ad
 
-    # 自动检测
+    # Auto-detect
     python convert_to_h5ad.py --input auto --path ./some_data/
 """
 
@@ -37,22 +37,22 @@ import tifffile
 import cv2
 from tqdm import tqdm
 
-# ==================== AnnData 格式规范 ====================
+# ==================== AnnData Format Specification ====================
 """
-标准 AnnData 结构:
-    adata.X              : [N_cells, N_genes] float32 基因表达矩阵
+Standard AnnData structure:
+    adata.X              : [N_cells, N_genes] float32 gene expression matrix
     adata.obs:
-        sample_id         : str  样本标识
-        image_path        : str  对应的 H&E 完整图像路径
-        (barcode)         : str  (index) 细胞/spot 条码
+        sample_id         : str  sample identifier
+        image_path        : str  corresponding H&E full image path
+        (barcode)         : str  (index) cell/spot barcode
     adata.obsm:
-        spatial           : [N, 2] float32 空间坐标 (pixel_x, pixel_y)
-        X_scGPT           : [N, D] (可选) scGPT 降维嵌入
+        spatial           : [N, 2] float32 spatial coordinates (pixel_x, pixel_y)
+        X_scGPT           : [N, D] (optional) scGPT dimensionality reduction embedding
     adata.var:
-        (index)           : str  基因名称
+        (index)           : str  gene name
     adata.uns:
-        dataset_type      : str  数据来源类型
-        conversion_date   : str  转换日期
+        dataset_type      : str  data source type
+        conversion_date   : str  conversion date
 """
 
 
@@ -65,50 +65,50 @@ def xenium_to_h5ad(
     output_path: str = "xenium_data.h5ad",
     scale_factor: float = None,
 ):
-    """将 Xenium 预处理后的数据转换为 AnnData"""
+    """Convert Xenium preprocessed data to AnnData"""
     import anndata as ad
 
     print("=" * 60)
-    print("Xenium → AnnData 转换")
+    print("Xenium → AnnData Conversion")
     print("=" * 60)
 
-    # 1. 加载匹配细胞核
-    print(f"加载: {matched_nuclei_csv}")
+    # 1. Load matched nuclei
+    print(f"Loading: {matched_nuclei_csv}")
     matched = pd.read_csv(matched_nuclei_csv)
     matched = matched[matched["id_histology"] > 0].reset_index(drop=True)
 
-    # 2. 加载基因表达矩阵
-    print(f"加载: {cell_gene_matrix_csv}")
+    # 2. Load gene expression matrix
+    print(f"Loading: {cell_gene_matrix_csv}")
     expr = pd.read_csv(cell_gene_matrix_csv, index_col=0)
 
-    # 3. 对齐
+    # 3. Align
     expr_ids = set(expr.index.astype(int))
     matched_ids = set(matched["id_histology"])
     valid_ids = sorted(expr_ids & matched_ids)
     matched = matched[matched["id_histology"].isin(valid_ids)].reset_index(drop=True)
     expr = expr.loc[valid_ids]
 
-    # 4. 获取空间坐标
+    # 4. Get spatial coordinates
     if seg_mask_path and os.path.exists(seg_mask_path):
-        print(f"从分割 mask 计算质心: {seg_mask_path}")
+        print(f"Computing centroids from segmentation mask: {seg_mask_path}")
         centroids = _compute_centroids(seg_mask_path, valid_ids)
         coords = np.array([centroids.get(nid, (0, 0)) for nid in valid_ids], dtype=np.float32)
     else:
-        print("未提供分割 mask，坐标设为 (0,0)")
+        print("No segmentation mask provided, coordinates set to (0,0)")
         coords = np.zeros((len(valid_ids), 2), dtype=np.float32)
 
-    # 5. 估算缩放因子
+    # 5. Estimate scale factor
     if scale_factor is None and os.path.exists(he_image_path):
         scale_factor = _estimate_scale(he_image_path, seg_mask_path)
     coords_he = coords * (scale_factor or 1.0)
 
-    # 6. 过滤无效坐标
+    # 6. Filter invalid coordinates
     valid_mask = np.all(coords_he > 0, axis=1)
     matched = matched[valid_mask].reset_index(drop=True)
     expr = expr.iloc[np.where(valid_mask)[0]]
     coords_he = coords_he[valid_mask]
 
-    # 7. 创建 AnnData
+    # 7. Create AnnData
     adata = ad.AnnData(
         X=expr.values.astype(np.float32),
         obs=pd.DataFrame({
@@ -123,8 +123,8 @@ def xenium_to_h5ad(
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     adata.write_h5ad(output_path)
-    print(f"✓ 已保存: {output_path}")
-    print(f"  细胞数: {adata.n_obs}, 基因数: {adata.n_vars}")
+    print(f"✓ Saved: {output_path}")
+    print(f"  Cells: {adata.n_obs}, Genes: {adata.n_vars}")
     return adata
 
 
@@ -139,28 +139,28 @@ def csv_to_h5ad(
     output_path: str = "csv_data.h5ad",
     ngenes: int = 2000,
 ):
-    """将 CSV 格式的数据集转换为 AnnData (BRCA/DLPFC/CCRCC 通用)
+    """Convert CSV-format datasets to AnnData (BRCA/DLPFC/CCRCC common)
 
-    期望的目录结构:
+    Expected directory structure:
         image_dir/        standardized_{id}.jpg
         st_dir/           spot_{id}.csv        (barcode, pixel_x, pixel_y)
         intdata_dir/      {id}.csv             (reduced expression, features x cells)
         st_dir/           barcode_{id}.csv     (barcode list)
 
     Args:
-        image_dir:   图像目录
-        sample_ids:  样本 ID 列表
-        spot_prefix: spot CSV 文件名前缀
-        intdata_dir: 表达矩阵目录 (默认与 spot 同目录)
-        barcode_prefix: barcode CSV 前缀
-        image_ext:   图像扩展名
-        output_path: 输出 h5ad 路径
-        ngenes:      基因数
+        image_dir:   image directory
+        sample_ids:  list of sample IDs
+        spot_prefix: spot CSV filename prefix
+        intdata_dir: expression matrix directory (default: same as spot directory)
+        barcode_prefix: barcode CSV prefix
+        image_ext:   image extension
+        output_path: output h5ad path
+        ngenes:      number of genes
     """
     import anndata as ad
 
     print("=" * 60)
-    print(f"CSV → AnnData 转换 ({len(sample_ids)} 样本)")
+    print(f"CSV → AnnData Conversion ({len(sample_ids)} samples)")
     print("=" * 60)
 
     if intdata_dir is None:
@@ -178,16 +178,16 @@ def csv_to_h5ad(
         intdata_path = os.path.join(intdata_dir, f"{sid}.csv")
         barcode_path = os.path.join(image_dir, f"{barcode_prefix}{sid}.csv")
 
-        # 检查文件
+        # Check files
         missing = []
         for name, path in [("image", img_path), ("spot", spot_path), ("expression", intdata_path)]:
             if not os.path.exists(path):
                 missing.append(name)
         if missing:
-            print(f"  [{sid}] 跳过：缺少 {', '.join(missing)}")
+            print(f"  [{sid}] Skipped: missing {', '.join(missing)}")
             continue
 
-        # 加载 spot 坐标
+        # Load spot coordinates
         spot_df = pd.read_csv(spot_path)
         if "pixel_x" in spot_df.columns and "pixel_y" in spot_df.columns:
             coords = spot_df[["pixel_x", "pixel_y"]].values.astype(np.float32)
@@ -196,7 +196,7 @@ def csv_to_h5ad(
             coords = spot_df.iloc[:, :2].values.astype(np.float32)
             barcodes = [f"{sid}_{i}" for i in range(len(coords))]
 
-        # 加载表达矩阵
+        # Load expression matrix
         expr_df = pd.read_csv(intdata_path, index_col=0)
         if expr_df.shape[1] > expr_df.shape[0]:
             expr_df = expr_df.T
@@ -211,7 +211,7 @@ def csv_to_h5ad(
         print(f"  [{sid}] {n} spots")
 
     if not all_expr:
-        raise RuntimeError("没有成功加载任何样本")
+        raise RuntimeError("No samples were loaded successfully")
 
     X = np.concatenate(all_expr, axis=0)
     spatial = np.concatenate(all_coords, axis=0)
@@ -230,8 +230,8 @@ def csv_to_h5ad(
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     adata.write_h5ad(output_path)
-    print(f"✓ 已保存: {output_path}")
-    print(f"  总 spots: {adata.n_obs}, 基因数: {adata.n_vars}")
+    print(f"✓ Saved: {output_path}")
+    print(f"  Total spots: {adata.n_obs}, Genes: {adata.n_vars}")
     return adata
 
 
@@ -241,29 +241,29 @@ def visium_to_h5ad(
     output_path: str = "visium_data.h5ad",
     ngenes: int = 2000,
 ):
-    """将 10X Visium spaceranger 输出转换为 AnnData"""
+    """Convert 10X Visium spaceranger output to AnnData"""
     import scanpy as sc
     import anndata as ad
 
     print("=" * 60)
-    print("Visium spaceranger → AnnData 转换")
+    print("Visium spaceranger → AnnData Conversion")
     print("=" * 60)
 
     h5_path = os.path.join(spaceranger_dir, "filtered_feature_bc_matrix.h5")
     if not os.path.exists(h5_path):
-        raise FileNotFoundError(f"找不到: {h5_path}")
+        raise FileNotFoundError(f"File not found: {h5_path}")
 
     adata = sc.read_10x_h5(h5_path)
     adata.var_names_make_unique()
 
-    # 加载空间坐标
+    # Load spatial coordinates
     tissue_pos = os.path.join(spaceranger_dir, "spatial", "tissue_positions_list.csv")
     if os.path.exists(tissue_pos):
         pos = pd.read_csv(tissue_pos, header=None, index_col=0)
         pos = pos.loc[adata.obs_names]
         adata.obsm["spatial"] = pos[[4, 5]].values.astype(np.float32)  # pixel coords
 
-    # 加载图像路径
+    # Load image path
     hires_img = os.path.join(spaceranger_dir, "spatial", "tissue_hires_image.png")
     if os.path.exists(hires_img):
         img_path = os.path.abspath(hires_img)
@@ -274,23 +274,23 @@ def visium_to_h5ad(
     adata.obs["image_path"] = img_path
     adata.uns["dataset_type"] = "visium"
 
-    # 截取基因数
+    # Truncate gene count
     if adata.n_vars > ngenes:
         adata = adata[:, :ngenes].copy()
 
     adata.write_h5ad(output_path)
-    print(f"✓ 已保存: {output_path}")
+    print(f"✓ Saved: {output_path}")
     print(f"  spots: {adata.n_obs}, genes: {adata.n_vars}")
     return adata
 
 
-# ==================== 验证工具 ====================
+# ==================== Validation Tool ====================
 def validate_h5ad(adata_path: str) -> bool:
-    """验证 h5ad 文件是否符合 CarHE 格式要求"""
+    """Validate whether an h5ad file meets CarHE format requirements"""
     import scanpy as sc
 
     print("=" * 60)
-    print(f"验证 AnnData: {adata_path}")
+    print(f"Validating AnnData: {adata_path}")
     print("=" * 60)
 
     adata = sc.read_h5ad(adata_path)
@@ -306,22 +306,22 @@ def validate_h5ad(adata_path: str) -> bool:
         if check(adata):
             print(f"  ✓ {name}")
         else:
-            print(f"  ✗ {name} 缺失")
+            print(f"  ✗ {name} missing")
             ok = False
 
-    print(f"\n  形状: {adata.shape}")
-    print(f"  sample_id 数量: {adata.obs['sample_id'].nunique()}")
+    print(f"\n  Shape: {adata.shape}")
+    print(f"  Number of sample_ids: {adata.obs['sample_id'].nunique()}")
     if ok:
-        print("  验证通过 ✓")
+        print("  Validation passed ✓")
     return ok
 
 
-# ==================== 辅助函数 ====================
+# ==================== Helper Functions ====================
 def _compute_centroids(seg_path: str, target_ids: list) -> dict:
-    """从分割 mask 计算质心"""
+    """Compute centroids from segmentation mask"""
     seg = tifffile.imread(seg_path)
     centroids = {}
-    for nid in tqdm(target_ids, desc="计算质心"):
+    for nid in tqdm(target_ids, desc="Computing centroids"):
         ys, xs = np.where(seg == nid)
         if len(ys) == 0:
             continue
@@ -330,25 +330,25 @@ def _compute_centroids(seg_path: str, target_ids: list) -> dict:
 
 
 def _estimate_scale(he_path: str, seg_path: str = None) -> float:
-    """估算 H&E 到分割 mask 的缩放比例"""
+    """Estimate the scale ratio from H&E to segmentation mask"""
     if seg_path and os.path.exists(seg_path):
         seg = tifffile.imread(seg_path)
         he = tifffile.imread(he_path)
         he_h = he.shape[0] if he.shape[-1] in (3, 4) else he.shape[1]
         ratio = he_h / max(seg.shape[0], 1)
-        print(f"  估算缩放比: {ratio:.2f}")
+        print(f"  Estimated scale ratio: {ratio:.2f}")
         return ratio
-    return 4.7  # 默认 Xenium: ~0.2125 μm/pixel → 1 μm/pixel
+    return 4.7  # Default Xenium: ~0.2125 μm/pixel → 1 μm/pixel
 
 
-# ==================== 入口 ====================
+# ==================== Entry Point ====================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="数据格式转换: 任意格式 → AnnData (h5ad)",
+        description="Data format conversion: Any Format → AnnData (h5ad)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    sub = parser.add_subparsers(dest="command", help="转换命令")
+    sub = parser.add_subparsers(dest="command", help="Conversion commands")
 
     # Xenium
     p_xe = sub.add_parser("xenium", help="Xenium → h5ad")
@@ -361,7 +361,7 @@ if __name__ == "__main__":
     # CSV
     p_csv = sub.add_parser("csv", help="CSV (BRCA/DLPFC) → h5ad")
     p_csv.add_argument("--image_dir", required=True)
-    p_csv.add_argument("--sample_ids", required=True, help="逗号分隔的样本ID")
+    p_csv.add_argument("--sample_ids", required=True, help="Comma-separated sample IDs")
     p_csv.add_argument("--intdata_dir", default=None)
     p_csv.add_argument("--spot_prefix", default="spot_")
     p_csv.add_argument("--image_ext", default=".jpg")
@@ -373,7 +373,7 @@ if __name__ == "__main__":
     p_vis.add_argument("--output", default="visium_data.h5ad")
 
     # Validate
-    p_val = sub.add_parser("validate", help="验证 h5ad 格式")
+    p_val = sub.add_parser("validate", help="Validate h5ad format")
     p_val.add_argument("--adata", required=True)
 
     args = parser.parse_args()

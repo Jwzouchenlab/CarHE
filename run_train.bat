@@ -1,8 +1,8 @@
 @echo off
 REM ============================================================
-REM CarHE Xenium Training — 一键运行
+REM CarHE Xenium Training - One-click Run
 REM ============================================================
-REM 在 CarHE/ 目录下运行此脚本
+REM Run this script from the CarHE/ directory
 REM ============================================================
 
 echo ============================================================

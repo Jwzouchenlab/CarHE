@@ -297,7 +297,7 @@ if __name__ == "__main__":
     
     # Data source
     parser.add_argument("--adata", type=str, default=CFG.default_adata_path,
-                        help="AnnData h5ad 文件路径")
+                        help="Path to AnnData .h5ad file")
     
     # Direct image mode
     parser.add_argument("--image_path", type=str, default=None,

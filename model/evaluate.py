@@ -575,9 +575,9 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", type=str, required=True,
                         help="Model checkpoint path")
     parser.add_argument("--adata", type=str, default=CFG.default_adata_path,
-                        help="AnnData h5ad 文件路径")
+                        help="Path to AnnData .h5ad file")
     
-    # --- 已废弃: --dataset 不再使用，统一用 --adata ---
+    # Legacy: --dataset is deprecated, use --adata instead
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--output", type=str, default="./evaluation_results")

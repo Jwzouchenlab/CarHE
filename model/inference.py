@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """CarHE Inference Script
-统一使用 AnnData (h5ad) 格式。所有数据必须先转换为 h5ad。
+All data must be converted to AnnData (.h5ad) format before use.
 
 Usage:
-    # 评估模式
+    # Evaluation mode
     python inference.py --mode eval --adata ../data/xenium_prostate.h5ad --checkpoint ./checkpoint/model.pt
     
-    # 预测模式 (KNN)
+    # Prediction mode (KNN)
     python inference.py --mode predict --image_path image.tif --centers_path centers.txt \
         --ref_adata ref.h5ad --checkpoint ./checkpoint/model.pt
 
-    # GradCAM 模式
+    # GradCAM mode
     python inference.py --mode gradcam --adata ../data/xenium_prostate.h5ad \
         --checkpoint ./checkpoint/model.pt --spot_idx 0
 """
@@ -513,7 +513,7 @@ if __name__ == "__main__":
     
     # Evaluation mode arguments
     parser.add_argument("--adata", type=str, default=CFG.default_adata_path,
-                        help="AnnData h5ad 文件路径 (eval/gradcam 模式)")
+                        help="Path to AnnData .h5ad file (eval/gradcam mode)")
     
     # Prediction mode arguments
     parser.add_argument("--image_path", type=str, default=None,

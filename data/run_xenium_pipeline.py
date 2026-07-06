@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-Xenium 数据预处理统一管线
-=========================
+Xenium Data Preprocessing Unified Pipeline
+==========================================
 
-一键运行所有预处理步骤，将 Xenium 原始数据转换为 CarHE 可用的格式。
+One-click execution of all preprocessing steps, converting Xenium raw data 
+into CarHE-compatible format.
 
-管线步骤：
-    Step 1: 坐标对齐（Xenium 微米 → H&E 像素）
-    Step 2: 提取基因表达矩阵
-    Step 3: Xenium 核分割 mask 生成
-    Step 4: H&E 核分割（需要 Hover-Net，可选）
-    Step 5: 细胞匹配（Xenium ↔ H&E）
+Pipeline steps:
+    Step 1: Coordinate alignment (Xenium microns → H&E pixels)
+    Step 2: Extract gene expression matrix
+    Step 3: Generate Xenium nuclei segmentation mask
+    Step 4: H&E nuclei segmentation (requires Hover-Net, optional)
+    Step 5: Cell matching (Xenium ↔ H&E)
 
 Usage:
-    # 运行所有步骤
+    # Run all steps
     python run_xenium_pipeline.py --all
 
-    # 只运行特定步骤
+    # Run specific steps only
     python run_xenium_pipeline.py --step 1,2
 
-    # 跳过 HoverNet（使用预先生成的分割）
+    # Skip HoverNet (use pre-generated segmentation)
     python run_xenium_pipeline.py --all --skip_hovernet
 """
 
@@ -32,22 +33,22 @@ import pandas as pd
 import tifffile
 from pathlib import Path
 
-# ==================== 配置 ====================
+# ==================== Configuration ====================
 class PipelineConfig:
-    """管线路径配置"""
+    """Pipeline path configuration"""
     def __init__(self, data_dir="."):
         self.data_dir = data_dir
         self.outs_dir = os.path.join(data_dir, "Xenium_Prime_Human_Prostate_FFPE_outs")
         self.output_dir = os.path.join(data_dir, "data_processing")
-        self.scripts_dir = data_dir  # 预处理脚本所在目录
+        self.scripts_dir = data_dir  # directory containing preprocessing scripts
         
-        # 输入文件
+        # Input files
         self.he_image = os.path.join(data_dir, "Xenium_Prime_Human_Prostate_FFPE_he_image.ome.tif")
         self.alignment_csv = os.path.join(data_dir, "Xenium_Prime_Human_Prostate_FFPE_he_imagealignment.csv")
         self.nucleus_boundaries = os.path.join(self.outs_dir, "nucleus_boundaries.csv.gz")
         self.cell_feature_matrix = os.path.join(self.outs_dir, "cell_feature_matrix")
         
-        # 输出文件
+        # Output files
         os.makedirs(self.output_dir, exist_ok=True)
         self.nucleus_boundaries_HE = os.path.join(self.output_dir, "nucleus_boundaries_HE_coords.csv.gz")
         self.cell_gene_matrix = os.path.join(self.output_dir, "cell_gene_matrix.csv")
@@ -59,64 +60,64 @@ class PipelineConfig:
 
 
 def run_cmd(cmd, cwd=None):
-    """运行命令并检查返回值"""
+    """Run a command and check return code"""
     print(f"\n{'='*60}")
-    print(f"执行: {' '.join(cmd)}")
+    print(f"Executing: {' '.join(cmd)}")
     print(f"{'='*60}")
     result = subprocess.run(cmd, cwd=cwd)
     if result.returncode != 0:
-        print(f"警告: 命令返回 {result.returncode}")
+        print(f"Warning: command returned {result.returncode}")
     return result.returncode
 
 
-# ==================== Step 1: 坐标对齐 ====================
+# ==================== Step 1: Coordinate Alignment ====================
 def step1_align_coordinates(cfg: PipelineConfig):
-    """将 Xenium 核边界坐标从微米转换为 H&E 像素坐标
+    """Convert Xenium nucleus boundary coordinates from microns to H&E pixel coordinates
     
-    使用 alignment matrix: M_inv @ [x_micron/0.2125, y_micron/0.2125, 1]^T
+    Uses alignment matrix: M_inv @ [x_micron/0.2125, y_micron/0.2125, 1]^T
     """
     print("\n" + "="*60)
-    print("Step 1: 坐标对齐 (Xenium 微米 → H&E 像素)")
+    print("Step 1: Coordinate Alignment (Xenium microns → H&E pixels)")
     print("="*60)
     
-    # 读取对齐矩阵
+    # Read alignment matrix
     M = pd.read_csv(cfg.alignment_csv, header=None).values
     M_inv = np.linalg.inv(M)
     
-    # 读取核边界
-    print(f"读取核边界: {cfg.nucleus_boundaries}")
+    # Read nucleus boundaries
+    print(f"Reading nucleus boundaries: {cfg.nucleus_boundaries}")
     boundaries = pd.read_csv(cfg.nucleus_boundaries, compression='gzip')
-    print(f"  原始坐标范围: x=[{boundaries['vertex_x'].min():.1f}, {boundaries['vertex_x'].max():.1f}] μm")
+    print(f"  Original coordinate range: x=[{boundaries['vertex_x'].min():.1f}, {boundaries['vertex_x'].max():.1f}] μm")
     
-    # 转换：微米 → Xenium 像素 → H&E 像素
+    # Convert: microns → Xenium pixels → H&E pixels
     x_xe_px = boundaries['vertex_x'] / 0.2125
     y_xe_px = boundaries['vertex_y'] / 0.2125
     
     xe_homogeneous = np.column_stack([x_xe_px, y_xe_px, np.ones(len(boundaries))])
     he_pixels = (M_inv @ xe_homogeneous.T).T
     
-    # 更新 DataFrame
+    # Update DataFrame
     output_df = boundaries.copy()
     output_df['vertex_x'] = he_pixels[:, 0].round(0).astype(int)
     output_df['vertex_y'] = he_pixels[:, 1].round(0).astype(int)
     
-    # 删除不需要的列
+    # Remove unnecessary columns
     for col in ['label_id']:
         if col in output_df.columns:
             output_df = output_df.drop(columns=[col])
     
-    # 保存
-    print(f"保存: {cfg.nucleus_boundaries_HE}")
+    # Save
+    print(f"Saving: {cfg.nucleus_boundaries_HE}")
     output_df.to_csv(cfg.nucleus_boundaries_HE, index=False, compression='gzip')
-    print(f"  H&E 像素坐标范围: x=[{output_df['vertex_x'].min()}, {output_df['vertex_x'].max()}]")
-    print("Step 1 完成 ✓")
+    print(f"  H&E pixel coordinate range: x=[{output_df['vertex_x'].min()}, {output_df['vertex_x'].max()}]")
+    print("Step 1 complete ✓")
 
 
-# ==================== Step 2: 提取基因表达矩阵 ====================
+# ==================== Step 2: Extract Gene Expression Matrix ====================
 def step2_gene_matrix(cfg: PipelineConfig):
-    """从 cell_feature_matrix 提取并过滤基因表达矩阵"""
+    """Extract and filter gene expression matrix from cell_feature_matrix"""
     print("\n" + "="*60)
-    print("Step 2: 提取基因表达矩阵")
+    print("Step 2: Extract Gene Expression Matrix")
     print("="*60)
     
     script = os.path.join(cfg.scripts_dir, "2_get_xenium_cell_gene_matrix.py")
@@ -128,14 +129,14 @@ def step2_gene_matrix(cfg: PipelineConfig):
         "--del_intm_files=True",
     ]
     run_cmd(cmd, cwd=cfg.data_dir)
-    print("Step 2 完成 ✓")
+    print("Step 2 complete ✓")
 
 
-# ==================== Step 3: Xenium 核分割 mask ====================
+# ==================== Step 3: Xenium Nuclei Segmentation Mask ====================
 def step3_xenium_nuclei_seg(cfg: PipelineConfig):
-    """从 Xenium 核边界生成核分割 mask"""
+    """Generate nuclei segmentation mask from Xenium nucleus boundaries"""
     print("\n" + "="*60)
-    print("Step 3: 生成 Xenium 核分割 mask")
+    print("Step 3: Generate Xenium Nuclei Segmentation Mask")
     print("="*60)
     
     script = os.path.join(cfg.scripts_dir, "1_get_xenium_nuclei_seg_image.py")
@@ -148,14 +149,14 @@ def step3_xenium_nuclei_seg(cfg: PipelineConfig):
         "--del_intm_files=True",
     ]
     run_cmd(cmd, cwd=cfg.data_dir)
-    print("Step 3 完成 ✓")
+    print("Step 3 complete ✓")
 
 
-# ==================== Step 5: 细胞匹配 ====================
+# ==================== Step 5: Cell Matching ====================
 def step5_cell_matching(cfg: PipelineConfig):
-    """将 Xenium 细胞与 H&E 分割核匹配"""
+    """Match Xenium cells with H&E segmented nuclei"""
     print("\n" + "="*60)
-    print("Step 5: 细胞匹配 (Xenium ↔ H&E)")
+    print("Step 5: Cell Matching (Xenium ↔ H&E)")
     print("="*60)
     
     script = os.path.join(cfg.scripts_dir, "4_get_corresponding_cells.py")
@@ -167,60 +168,60 @@ def step5_cell_matching(cfg: PipelineConfig):
         f"--dir_output={cfg.output_dir}",
     ]
     run_cmd(cmd, cwd=cfg.data_dir)
-    print("Step 5 完成 ✓")
+    print("Step 5 complete ✓")
 
 
-# ==================== 主入口 ====================
+# ==================== Main Entry Point ====================
 def main():
     parser = argparse.ArgumentParser(
-        description="Xenium 数据预处理统一管线",
+        description="Xenium Data Preprocessing Unified Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-示例:
-  python run_xenium_pipeline.py --all          # 运行全部预处理
-  python run_xenium_pipeline.py --step 1,2     # 只运行坐标对齐和基因矩阵
-  python run_xenium_pipeline.py --all --skip_hovernet  # 跳过 HoverNet
+Examples:
+  python run_xenium_pipeline.py --all          # Run all preprocessing
+  python run_xenium_pipeline.py --step 1,2     # Run coordinate alignment and gene matrix only
+  python run_xenium_pipeline.py --all --skip_hovernet  # Skip HoverNet
         """
     )
     parser.add_argument("--data_dir", default=".",
-                        help="数据目录路径（包含 Xenium 输出和脚本）")
+                        help="Data directory path (contains Xenium output and scripts)")
     parser.add_argument("--all", action="store_true",
-                        help="运行所有步骤")
+                        help="Run all steps")
     parser.add_argument("--step", type=str, default=None,
-                        help="指定步骤，逗号分隔 (如 '1,2,5')")
+                        help="Specify steps, comma-separated (e.g., '1,2,5')")
     parser.add_argument("--skip_hovernet", action="store_true",
-                        help="跳过 HoverNet 步骤（Step 4）")
+                        help="Skip HoverNet step (Step 4)")
     
     args = parser.parse_args()
     cfg = PipelineConfig(args.data_dir)
     
-    # 确定要运行的步骤
+    # Determine which steps to run
     if args.all:
-        steps = [1, 2, 3, 5]  # 默认不运行 HoverNet (Step 4)
+        steps = [1, 2, 3, 5]  # HoverNet (Step 4) not run by default
         if not args.skip_hovernet:
-            print("注意: Step 4 (HoverNet) 需要配置 HoverNet 环境，默认跳过。")
-            print("如需运行，请手动执行：python 3.1_segment_nuclei_he_image.py --step 1")
+            print("Note: Step 4 (HoverNet) requires a configured HoverNet environment, skipped by default.")
+            print("To run, please manually execute: python 3.1_segment_nuclei_he_image.py --step 1")
     elif args.step:
         steps = [int(s.strip()) for s in args.step.split(",")]
     else:
         parser.print_help()
         return
     
-    # 验证前置条件
+    # Validate prerequisites
     for s in steps:
         if s == 1:
-            assert os.path.exists(cfg.nucleus_boundaries), f"核边界文件不存在: {cfg.nucleus_boundaries}"
-            assert os.path.exists(cfg.alignment_csv), f"对齐矩阵不存在: {cfg.alignment_csv}"
+            assert os.path.exists(cfg.nucleus_boundaries), f"Nucleus boundary file not found: {cfg.nucleus_boundaries}"
+            assert os.path.exists(cfg.alignment_csv), f"Alignment matrix not found: {cfg.alignment_csv}"
         elif s == 2:
-            assert os.path.exists(cfg.cell_feature_matrix), f"细胞特征矩阵目录不存在: {cfg.cell_feature_matrix}"
+            assert os.path.exists(cfg.cell_feature_matrix), f"Cell feature matrix directory not found: {cfg.cell_feature_matrix}"
         elif s == 3:
-            assert os.path.exists(cfg.he_image), f"H&E 图像不存在: {cfg.he_image}"
-            assert os.path.exists(cfg.nucleus_boundaries_HE), f"转换后的核边界不存在: {cfg.nucleus_boundaries_HE}。请先运行 Step 1"
+            assert os.path.exists(cfg.he_image), f"H&E image not found: {cfg.he_image}"
+            assert os.path.exists(cfg.nucleus_boundaries_HE), f"Transformed nucleus boundaries not found: {cfg.nucleus_boundaries_HE}. Please run Step 1 first"
         elif s == 5:
-            assert os.path.exists(cfg.xenium_nuclei_seg), f"Xenium 核分割不存在: {cfg.xenium_nuclei_seg}。请先运行 Step 3"
-            assert os.path.exists(cfg.cell_gene_matrix), f"基因表达矩阵不存在: {cfg.cell_gene_matrix}。请先运行 Step 2"
+            assert os.path.exists(cfg.xenium_nuclei_seg), f"Xenium nuclei segmentation not found: {cfg.xenium_nuclei_seg}. Please run Step 3 first"
+            assert os.path.exists(cfg.cell_gene_matrix), f"Gene expression matrix not found: {cfg.cell_gene_matrix}. Please run Step 2 first"
     
-    # 执行步骤
+    # Execute steps
     step_funcs = {
         1: step1_align_coordinates,
         2: step2_gene_matrix,
@@ -232,20 +233,20 @@ def main():
         if s in step_funcs:
             step_funcs[s](cfg)
         else:
-            print(f"未知步骤: {s}（可用步骤: 1,2,3,5）")
+            print(f"Unknown step: {s} (available steps: 1, 2, 3, 5)")
     
     print("\n" + "="*60)
-    print("管线执行完毕!")
-    print(f"输出目录: {cfg.output_dir}")
+    print("Pipeline execution complete!")
+    print(f"Output directory: {cfg.output_dir}")
     print("="*60)
     
-    # 检查最终输出
+    # Check final outputs
     final_files = [
-        ("基因表达矩阵", cfg.cell_gene_matrix_filtered),
-        ("匹配细胞核", cfg.matched_nuclei),
+        ("Gene expression matrix", cfg.cell_gene_matrix_filtered),
+        ("Matched nuclei", cfg.matched_nuclei),
     ]
     for name, path in final_files:
-        status = "✓" if os.path.exists(path) else "✗ (尚未生成)"
+        status = "✓" if os.path.exists(path) else "✗ (not yet generated)"
         print(f"  {name}: {status}")
 
 

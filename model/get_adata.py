@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-CarHE 统一数据加载器 — AnnData 标准格式
-==========================================
+CarHE Unified Data Loader — AnnData Standard Format
+====================================================
 
-所有数据集必须转换为 AnnData (h5ad) 格式后使用。
-不再保留 CSV / Xenium 等特例分支。
+All datasets must be converted to AnnData (h5ad) format before use.
+No more CSV / Xenium special-case branches are retained.
 
-AnnData 格式要求:
-    adata.X              : [N_spots, N_genes] 基因表达矩阵 (float32)
+AnnData format requirements:
+    adata.X              : [N_spots, N_genes] gene expression matrix (float32)
     adata.obs:
-        - sample_id      : 样本标识 (所有数据集都需要)
-        - image_path     : 对应的完整 H&E 图像路径 (所有数据集都需要)
+        - sample_id      : sample identifier (required for all datasets)
+        - image_path     : corresponding full H&E image path (required for all datasets)
     adata.obsm:
-        - spatial        : [N, 2] 空间坐标 (pixel_x, pixel_y)
-    adata.obsm 可选:
-        - X_scGPT        : [N, D] scGPT 预计算的降维嵌入 (若存在则优先使用)
-    adata.var            : 基因名称
+        - spatial        : [N, 2] spatial coordinates (pixel_x, pixel_y)
+    adata.obsm optional:
+        - X_scGPT        : [N, D] scGPT pre-computed reduced embeddings (used preferentially if present)
+    adata.var            : gene names
 
-转换工具: data/convert_to_h5ad.py
+Conversion tool: data/convert_to_h5ad.py
 """
 
 import os
@@ -34,9 +34,9 @@ from typing import Tuple
 from config import CFG
 
 
-# ==================== 图像读取辅助 ====================
+# ==================== Image Loading Helpers ====================
 def _load_image_safe(image_path: str) -> np.ndarray:
-    """安全加载 H&E 图像 (支持 tif, jpg, png)"""
+    """Safely load H&E image (supports tif, jpg, png)"""
     if image_path.lower().endswith(('.btf', '.tif', '.tiff')):
         try:
             with tifffile.TiffFile(image_path) as tif:
@@ -46,15 +46,15 @@ def _load_image_safe(image_path: str) -> np.ndarray:
     else:
         img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
     if img is None:
-        raise ValueError(f"无法加载图像: {image_path}")
+        raise ValueError(f"Cannot load image: {image_path}")
     return img
 
 
-# ==================== 统一 Dataset 类 ====================
+# ==================== Unified Dataset Class ====================
 class SpotDataset(Dataset):
-    """通用空间转录组 Dataset — 从 AnnData 加载
+    """General-purpose spatial transcriptomics Dataset — loads from AnnData
 
-    每个 item 包含:
+    Each item contains:
         - image:              [3, 256, 256] tensor
         - reduced_expression: [ngenes] tensor
         - barcode:            str
@@ -75,16 +75,16 @@ class SpotDataset(Dataset):
         self.patch_size = patch_size
         self.ngenes = ngenes or CFG.spot_embedding
 
-        # 加载 H&E 图像
+        # Load H&E image
         self.whole_image = _load_image_safe(image_path)
 
-        # 空间坐标
+        # Spatial coordinates
         if "spatial" not in adata_subset.obsm:
-            raise ValueError(f"AnnData 缺少 obsm['spatial']: {sample_id}")
+            raise ValueError(f"AnnData missing obsm['spatial']: {sample_id}")
         self.spatial_pos = adata_subset.obsm["spatial"]
         self.barcodes = adata_subset.obs_names.tolist()
 
-        # 基因表达：优先使用 X_scGPT，否则使用 .X
+        # Gene expression: prefer X_scGPT, fallback to .X
         if "X_scGPT" in adata_subset.obsm:
             X_data = adata_subset.obsm["X_scGPT"]
         else:
@@ -94,9 +94,9 @@ class SpotDataset(Dataset):
         self.reduced_matrix = np.asarray(X_data, dtype=np.float32)
 
         if self.reduced_matrix.shape[0] != len(self.barcodes):
-            raise ValueError(f"表达矩阵行数 ({self.reduced_matrix.shape[0]}) 与 barcode 数 ({len(self.barcodes)}) 不一致")
+            raise ValueError(f"Expression matrix rows ({self.reduced_matrix.shape[0]}) mismatch with barcode count ({len(self.barcodes)})")
 
-        # 数据增强
+        # Data augmentation
         self.augmentations = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
@@ -125,7 +125,7 @@ class SpotDataset(Dataset):
             cx, cy = self.spatial_pos[real_idx]
             cx, cy = int(cx), int(cy)
 
-            # 提取 256×256 patch
+            # Extract 256x256 patch
             half = self.patch_size // 2
             h, w = self.whole_image.shape[:2]
             x1, x2 = max(0, cx - half), min(w, cx + half)
@@ -133,7 +133,7 @@ class SpotDataset(Dataset):
 
             patch = self.whole_image[y1:y2, x1:x2]
 
-            # padding
+            # Padding
             pad_l = max(0, half - cx)
             pad_r = max(0, cx + half - w)
             pad_t = max(0, half - cy)
@@ -156,7 +156,7 @@ class SpotDataset(Dataset):
             patch_pil = Image.fromarray(patch_rgb)
             img_tensor = self.base_transform(patch_pil)
 
-            # 基因表达
+            # Gene expression
             expr = self.reduced_matrix[real_idx, :self.ngenes].astype(np.float32)
             if len(expr) < self.ngenes:
                 expr = np.pad(expr, (0, self.ngenes - len(expr)), 'constant')
@@ -169,7 +169,7 @@ class SpotDataset(Dataset):
             }
 
 
-# ==================== 统一 DataLoader 构建 ====================
+# ==================== Unified DataLoader Builder ====================
 def build_loaders_adata(
     adata: "anndata.AnnData" = None,
     adata_path: str = None,
@@ -179,31 +179,31 @@ def build_loaders_adata(
     seed: int = 123,
     ngenes: int = None,
 ) -> Tuple[DataLoader, DataLoader]:
-    """从 AnnData 构建训练/验证 DataLoader（统一入口）
+    """Build train/validation DataLoaders from AnnData (unified entry point)
 
-    支持两种方式：
-        1. adata=        传入已加载的 AnnData 对象
-        2. adata_path=   传入 h5ad 文件路径
+    Supports two modes:
+        1. adata=        pass an already-loaded AnnData object
+        2. adata_path=   pass a path to an h5ad file
     """
     import scanpy as sc
 
     if adata is None and adata_path is not None:
         adata = sc.read_h5ad(adata_path)
     elif adata is None:
-        raise ValueError("需要提供 adata 或 adata_path")
+        raise ValueError("Must provide either adata or adata_path")
 
     batch_size = batch_size or CFG.batch_size
     ngenes = ngenes or CFG.spot_embedding
 
-    # 必须的列
+    # Required columns
     required_cols = ["sample_id", "image_path"]
     for col in required_cols:
         if col not in adata.obs.columns:
-            raise ValueError(f"AnnData.obs 缺少必要列: '{col}'。请用 convert_to_h5ad.py 转换数据。")
+            raise ValueError(f"AnnData.obs missing required column: '{col}'. Please use convert_to_h5ad.py to convert the data.")
 
-    # 按 sample_id 分组，每个样本创建一个 Dataset
+    # Group by sample_id, create one Dataset per sample
     sample_ids = adata.obs["sample_id"].unique().tolist()
-    print(f"检测到 {len(sample_ids)} 个样本: {sample_ids[:5]}{'...' if len(sample_ids) > 5 else ''}")
+    print(f"Detected {len(sample_ids)} samples: {sample_ids[:5]}{'...' if len(sample_ids) > 5 else ''}")
 
     datasets = []
     for sid in sample_ids:
@@ -218,7 +218,7 @@ def build_loaders_adata(
         )
         datasets.append(ds)
 
-    # 合并、划分
+    # Merge and split
     full = ConcatDataset(datasets)
     n_train = int(train_ratio * len(full))
     n_test = len(full) - n_train
@@ -236,11 +236,11 @@ def build_loaders_adata(
         num_workers=num_workers, pin_memory=True, drop_last=True
     )
 
-    print(f"总 spots/cells: {len(full)}, train: {n_train}, test: {n_test}")
+    print(f"Total spots/cells: {len(full)}, train: {n_train}, test: {n_test}")
     return train_loader, test_loader
 
 
-# ==================== 兼容旧接口（供 train/inference 调用） ====================
+# ==================== Legacy Compat Interface (for train/inference calls) ====================
 def build_loaders_csv(
     image_dir: str,
     csv_pattern: str,
@@ -248,9 +248,9 @@ def build_loaders_csv(
     batch_size: int = None,
     num_workers: int = 4,
 ) -> Tuple[DataLoader, DataLoader]:
-    """从 CSV 数据集直接构建 DataLoader（向后兼容，内部先转 h5ad）
+    """Build DataLoaders directly from CSV datasets (backward compatible; internally converts to h5ad first)
     
-    这是 get_Data.py 的替代：接受 CSV 路径 → 自动转 h5ad → 调用 build_loaders_adata
+    This is the replacement for get_Data.py: accepts CSV paths -> auto-convert to h5ad -> calls build_loaders_adata
     """
     import tempfile
     from convert_csv_to_h5ad import csv_folder_to_h5ad
