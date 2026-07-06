@@ -66,11 +66,13 @@ adata.var                  # gene names
 
 | Script | Input | Output |
 |--------|-------|--------|
-| `quick_xenium_to_h5ad.py` | Xenium `outs/` folder | `xenium_prostate.h5ad` |
+| `quick_xenium_to_h5ad.py` | Xenium `outs/` folder | `.h5ad` |
 | `convert_to_h5ad.py xenium` | Preprocessed Xenium CSVs | `.h5ad` |
 | `convert_to_h5ad.py csv` | CSV-format (BRCA/DLPFC) | `.h5ad` |
 | `convert_to_h5ad.py visium` | 10X spaceranger output | `.h5ad` |
 | `convert_to_h5ad.py validate` | Any `.h5ad` | Format validation report |
+
+> **Note:** For full Xenium preprocessing with H&E nuclei segmentation (requires HoverNet), see the original scripts at the [Zenodo release](https://doi.org/10.5281/zenodo.15668517). The quick converter above bypasses HoverNet for fast training-ready h5ad generation.
 
 ## Example: Full Xenium Pipeline
 

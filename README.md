@@ -47,12 +47,10 @@ CarHE/
 │   ├── utils.py                   # Utility functions
 │   └── checkpoint/                # Saved model checkpoints
 │
-└── data/                          # Data directory
+├── data/                          # Data directory
     ├── convert_to_h5ad.py         # Universal format converter
     ├── quick_xenium_to_h5ad.py    # Fast Xenium → h5ad converter
-    ├── run_xenium_pipeline.py     # Xenium preprocessing pipeline
-    ├── *.py                       # Xenium preprocessing scripts (1-4)
-    └── xenium_prostate.h5ad       # Example converted dataset
+    └── README.md                  # Dataset download links
 ```
 
 ---

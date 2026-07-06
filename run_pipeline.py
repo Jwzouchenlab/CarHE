@@ -120,15 +120,15 @@ def step_check_environment():
 
 # ==================== Step 1: Preprocess ====================
 def step_preprocess():
-    """Xenium data preprocessing"""
-    script = os.path.join(DATA_DIR, "run_xenium_pipeline.py")
+    """Xenium data preprocessing: run quick_xenium_to_h5ad.py"""
+    script = os.path.join(DATA_DIR, "quick_xenium_to_h5ad.py")
     if not os.path.exists(script):
         print(f"Preprocessing script not found: {script}")
         return False
     return run_cmd(
-        ["python", script, "--all"],
+        ["python", script],
         cwd=DATA_DIR,
-        description="Step 1/4: Xenium data preprocessing"
+        description="Step 1/4: Xenium data preprocessing (raw -> h5ad)"
     )
 
 
